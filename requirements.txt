@@ -1,0 +1,39 @@
+# ============================================================
+# Hybrid RAG + LoRA Fine-Tuned LLM System — Dependencies
+# ============================================================
+
+# --- Web Framework ---
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+pydantic>=2.6.0
+
+# --- Frontend ---
+streamlit>=1.35.0
+requests>=2.31.0
+
+# --- LangChain Ecosystem ---
+langchain>=0.2.0
+langchain-community>=0.2.0
+langchain-huggingface>=0.0.3
+langchain-text-splitters>=0.2.0
+
+# --- Vector Store ---
+faiss-cpu>=1.8.0
+chromadb>=0.5.0
+
+# --- Embeddings & Sentence Transformers ---
+sentence-transformers>=3.0.0
+
+# --- HuggingFace Transformers + PEFT/LoRA ---
+transformers>=4.40.0
+peft>=0.11.0
+accelerate>=0.30.0
+bitsandbytes>=0.43.0
+
+# --- Torch (CPU by default — swap for cu121 variant for GPU) ---
+torch>=2.2.0
+
+# --- Utilities ---
+numpy>=1.26.0
+scikit-learn>=1.4.0
+python-dotenv>=1.0.0

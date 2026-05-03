@@ -1,0 +1,22 @@
+# Environments
+venv/
+env/
+.env
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Data and Models
+data/
+*.safetensors
+*.bin
+*.h5
+
+# Logs
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db
