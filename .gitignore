@@ -1,3 +1,7 @@
+# Test artifacts
+.coverage
+.pytest_cache/
+
 # Environments
 venv/
 env/
@@ -10,6 +14,7 @@ __pycache__/
 
 # Data and Models
 data/
+!data/.gitkeep
 *.safetensors
 *.bin
 *.h5

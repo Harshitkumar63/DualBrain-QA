@@ -2,148 +2,157 @@
 app.py — Streamlit Frontend for the Hybrid RAG + LoRA System
 ==============================================================
 
-A modern chat interface that communicates with the FastAPI backend,
-displays routing decisions visually, and maintains conversation history.
-
-Run:
-    streamlit run app.py
+An advanced, premium-tier user interface:
+  1. Modern chat room with custom styled route badges and confidence meters.
+  2. Side-by-side or tabbed Analytics Dashboard retrieving live backend metrics.
+  3. Interactive, card-based Citation Display.
+  4. Sidebar File Upload utility integrating with the backend /upload endpoint.
+  5. SQLite-backed Session History sidebar to load/resume previous conversations.
 """
 
+import os
 import streamlit as st
 import requests
 import time
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 # ------------------------------------------------------------------ #
 #  Configuration                                                       #
 # ------------------------------------------------------------------ #
 
-BACKEND_URL = "http://localhost:8000"
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 CHAT_ENDPOINT = f"{BACKEND_URL}/chat"
 HEALTH_ENDPOINT = f"{BACKEND_URL}/health"
 INGEST_ENDPOINT = f"{BACKEND_URL}/ingest"
-ROUTER_DEBUG_ENDPOINT = f"{BACKEND_URL}/router/scores"
+UPLOAD_ENDPOINT = f"{BACKEND_URL}/upload"
+HISTORY_ENDPOINT = f"{BACKEND_URL}/history"
+SESSIONS_ENDPOINT = f"{BACKEND_URL}/sessions"
+METRICS_ENDPOINT = f"{BACKEND_URL}/metrics"
 
 # ------------------------------------------------------------------ #
-#  Page Config                                                         #
+#  Page Config & Styling                                               #
 # ------------------------------------------------------------------ #
 
 st.set_page_config(
-    page_title="Hybrid LLM System — RAG + LoRA",
+    page_title="Hybrid LLM System",
     page_icon="🧬",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# ------------------------------------------------------------------ #
-#  Custom CSS                                                          #
-# ------------------------------------------------------------------ #
-
 st.markdown("""
 <style>
-    /* ── Global ─────────────────────────────────────────────── */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-
+    /* ── Global Styles ───────────────────────────────────────── */
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+    
     html, body, [class*="st-"] {
-        font-family: 'Inter', sans-serif;
+        font-family: 'Outfit', sans-serif;
     }
 
-    /* ── Main container ────────────────────────────────────── */
     .main .block-container {
-        padding-top: 2rem;
-        max-width: 900px;
+        padding-top: 1.5rem;
     }
 
-    /* ── Route badges ──────────────────────────────────────── */
-    .route-badge {
+    /* ── Route Badges ────────────────────────────────────────── */
+    .badge-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        margin-top: 8px;
+    }
+    .badge {
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        padding: 4px 14px;
+        padding: 6px 14px;
         border-radius: 20px;
-        font-size: 0.78rem;
+        font-size: 0.8rem;
         font-weight: 600;
-        letter-spacing: 0.3px;
-        margin-top: 8px;
+        letter-spacing: 0.2px;
+        color: #ffffff !important;
     }
-    .route-rag {
-        background: linear-gradient(135deg, #0ea5e9, #6366f1);
-        color: #ffffff;
+    .badge-rag {
+        background: linear-gradient(135deg, #0284c7, #4f46e5);
+        border: 1px solid rgba(255, 255, 255, 0.1);
     }
-    .route-lora {
-        background: linear-gradient(135deg, #f59e0b, #ef4444);
-        color: #ffffff;
+    .badge-lora {
+        background: linear-gradient(135deg, #ea580c, #dc2626);
+        border: 1px solid rgba(255, 255, 255, 0.1);
     }
-
-    /* ── Latency chip ──────────────────────────────────────── */
-    .latency-chip {
+    .badge-intent {
+        background: rgba(255, 255, 255, 0.15);
+        color: #e2e8f0 !important;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    /* ── Latency chip ────────────────────────────────────────── */
+    .chip {
         display: inline-flex;
         align-items: center;
         gap: 4px;
-        padding: 2px 10px;
+        padding: 4px 10px;
         border-radius: 12px;
-        font-size: 0.7rem;
-        font-weight: 500;
-        background: rgba(100, 100, 100, 0.15);
-        color: #888;
-        margin-left: 8px;
-    }
-
-    /* ── Score bar ─────────────────────────────────────────── */
-    .score-bar-container {
-        margin-top: 10px;
-        padding: 10px 14px;
-        border-radius: 10px;
-        background: rgba(100, 100, 100, 0.06);
         font-size: 0.75rem;
-    }
-    .score-bar-label {
-        display: flex;
-        justify-content: space-between;
-        margin-bottom: 3px;
         font-weight: 500;
-        color: #666;
-    }
-    .score-bar-track {
-        width: 100%;
-        height: 6px;
-        border-radius: 3px;
-        background: rgba(100, 100, 100, 0.12);
-        margin-bottom: 8px;
-        overflow: hidden;
-    }
-    .score-bar-fill-rag {
-        height: 100%;
-        border-radius: 3px;
-        background: linear-gradient(90deg, #0ea5e9, #6366f1);
-    }
-    .score-bar-fill-lora {
-        height: 100%;
-        border-radius: 3px;
-        background: linear-gradient(90deg, #f59e0b, #ef4444);
+        background: rgba(255, 255, 255, 0.08);
+        color: #cbd5e1;
+        border: 1px solid rgba(255, 255, 255, 0.05);
     }
 
-    /* ── Sidebar styling ───────────────────────────────────── */
+    /* ── Citation Cards ──────────────────────────────────────── */
+    .citation-header {
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: #94a3b8;
+        margin-top: 12px;
+        margin-bottom: 6px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .citation-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 12px;
+    }
+    .citation-card {
+        background: rgba(30, 41, 59, 0.5);
+        border: 1px solid rgba(148, 163, 184, 0.15);
+        border-radius: 8px;
+        padding: 8px 12px;
+        font-size: 0.78rem;
+        color: #cbd5e1;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .citation-card span {
+        font-weight: 600;
+        color: #38bdf8;
+    }
+
+    /* ── Progress Indicators ─────────────────────────────────── */
+    .score-container {
+        margin-top: 10px;
+        padding: 12px;
+        border-radius: 10px;
+        background: rgba(15, 23, 42, 0.4);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    
+    /* ── Sidebar Styles ──────────────────────────────────────── */
     section[data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
-        color: #e2e8f0;
-    }
-    section[data-testid="stSidebar"] h1,
-    section[data-testid="stSidebar"] h2,
-    section[data-testid="stSidebar"] h3 {
-        color: #f1f5f9 !important;
-    }
-    section[data-testid="stSidebar"] p,
-    section[data-testid="stSidebar"] li,
-    section[data-testid="stSidebar"] span {
-        color: #cbd5e1 !important;
-    }
-    section[data-testid="stSidebar"] .stMarkdown code {
-        background: rgba(99, 102, 241, 0.2) !important;
-        color: #a5b4fc !important;
+        background: #090d16;
+        border-right: 1px solid rgba(255, 255, 255, 0.05);
     }
 
-    /* ── Status dot ────────────────────────────────────────── */
+    .stButton > button {
+        border-radius: 8px;
+        font-weight: 600;
+    }
+
+    /* ── Status Dot ──────────────────────────────────────────── */
     .status-dot {
         display: inline-block;
         width: 8px;
@@ -151,30 +160,28 @@ st.markdown("""
         border-radius: 50%;
         margin-right: 6px;
     }
-    .status-online { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
-    .status-offline { background: #ef4444; box-shadow: 0 0 6px #ef4444; }
+    .status-online { background: #10b981; box-shadow: 0 0 8px #10b981; }
+    .status-offline { background: #ef4444; box-shadow: 0 0 8px #ef4444; }
 
-    /* ── Header ────────────────────────────────────────────── */
-    .app-header {
+    /* ── Title Banner ────────────────────────────────────────── */
+    .header-banner {
         text-align: center;
-        padding: 1rem 0 0.5rem 0;
+        background: radial-gradient(circle at center, rgba(79, 70, 229, 0.15) 0%, transparent 60%);
+        padding: 2.5rem 1rem 1.5rem 1rem;
+        border-radius: 16px;
+        margin-bottom: 1.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.03);
     }
-    .app-header h1 {
-        font-size: 1.8rem;
-        font-weight: 700;
-        background: linear-gradient(135deg, #6366f1, #0ea5e9, #f59e0b);
+    .header-banner h1 {
+        font-size: 2.8rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #818cf8 0%, #38bdf8 50%, #f43f5e 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        margin-bottom: 0.3rem;
-    }
-    .app-header p {
-        font-size: 0.92rem;
-        color: #94a3b8;
-        margin: 0;
+        margin-bottom: 0.5rem;
     }
 </style>
 """, unsafe_allow_html=True)
-
 
 # ------------------------------------------------------------------ #
 #  Session State Initialization                                        #
@@ -183,269 +190,392 @@ st.markdown("""
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-if "show_scores" not in st.session_state:
-    st.session_state.show_scores = True
+if "session_id" not in st.session_state:
+    st.session_state.session_id = ""
 
+if "active_tab" not in st.session_state:
+    st.session_state.active_tab = "Chat Room"
 
 # ------------------------------------------------------------------ #
-#  Helper Functions                                                    #
+#  API Communication Helpers                                           #
 # ------------------------------------------------------------------ #
 
-def check_backend_health() -> Optional[dict]:
-    """Ping the backend health endpoint."""
+def check_backend_health() -> Optional[Dict[str, Any]]:
+    """Get server health status."""
     try:
-        resp = requests.get(HEALTH_ENDPOINT, timeout=3)
-        if resp.status_code == 200:
-            return resp.json()
-    except requests.ConnectionError:
-        return None
+        r = requests.get(HEALTH_ENDPOINT, timeout=2)
+        if r.status_code == 200:
+            return r.json()
+    except requests.RequestException:
+        pass
     return None
 
 
-def send_query(query: str, force_route: Optional[str] = None) -> Optional[dict]:
-    """Send a query to the /chat endpoint and return the response."""
-    payload = {"query": query}
-    if force_route:
-        payload["force_route"] = force_route
+def get_backend_metrics() -> Optional[Dict[str, Any]]:
+    """Fetch live system metrics."""
     try:
-        resp = requests.post(CHAT_ENDPOINT, json=payload, timeout=120)
-        if resp.status_code == 200:
-            return resp.json()
+        r = requests.get(METRICS_ENDPOINT, timeout=2)
+        if r.status_code == 200:
+            return r.json()
+    except requests.RequestException:
+        pass
+    return None
+
+
+def fetch_sessions() -> List[Dict[str, Any]]:
+    """Retrieve chat sessions from SQLite database."""
+    try:
+        r = requests.get(SESSIONS_ENDPOINT, timeout=2)
+        if r.status_code == 200:
+            return r.json().get("sessions", [])
+    except requests.RequestException:
+        pass
+    return []
+
+
+def load_session_messages(session_id: str) -> List[Dict[str, Any]]:
+    """Fetch previous chat log for session_id."""
+    try:
+        r = requests.get(f"{HISTORY_ENDPOINT}/{session_id}", timeout=3)
+        if r.status_code == 200:
+            return r.json().get("messages", [])
+    except requests.RequestException:
+        pass
+    return []
+
+
+def send_chat_query(
+    query: str,
+    session_id: str,
+    force_route: Optional[str] = None,
+    adapter_name: Optional[str] = None
+) -> Optional[Dict[str, Any]]:
+    """Send query to the chat API endpoint."""
+    payload = {
+        "query": query,
+        "session_id": session_id
+    }
+    if force_route and force_route != "Auto (Router decides)":
+        payload["force_route"] = "RAG" if "RAG" in force_route else "LORA"
+    if adapter_name and adapter_name != "base":
+        payload["adapter_name"] = adapter_name
+
+    try:
+        r = requests.post(CHAT_ENDPOINT, json=payload, timeout=90)
+        if r.status_code == 200:
+            return r.json()
         else:
-            st.error(f"Backend returned status {resp.status_code}: {resp.text}")
-            return None
-    except requests.ConnectionError:
-        st.error("❌ Cannot connect to the backend. Is the FastAPI server running?")
-        return None
-    except requests.Timeout:
-        st.error("⏱️ Request timed out. The model may be loading for the first time.")
-        return None
+            st.error(f"Error {r.status_code}: {r.text}")
+    except requests.RequestException as e:
+        st.error(f"Could not connect to FastAPI backend: {e}")
+    return None
 
 
-def render_route_badge(routed_path: str, latency_ms: float) -> str:
-    """Return HTML for the route badge and latency chip."""
-    if routed_path == "RAG":
-        badge = '<span class="route-badge route-rag">📚 Answered via RAG Pipeline</span>'
-    else:
-        badge = '<span class="route-badge route-lora">⚙️ Answered via LoRA Fine-Tuned Model</span>'
-
-    latency = f'<span class="latency-chip">⚡ {latency_ms:.0f} ms</span>'
-    return badge + latency
-
-
-def render_score_bars(scores: dict) -> str:
-    """Return HTML for the router similarity score visualization."""
-    if not scores or "forced" in scores:
-        return ""
-
-    html = '<div class="score-bar-container"><strong style="font-size:0.72rem;color:#888;">Router Confidence Scores</strong>'
-    for cluster_name, score in scores.items():
-        pct = max(0, min(100, score * 100))
-        fill_class = "score-bar-fill-rag" if "Factual" in cluster_name else "score-bar-fill-lora"
-        html += f"""
-        <div class="score-bar-label">
-            <span>{cluster_name}</span>
-            <span>{score:.4f}</span>
-        </div>
-        <div class="score-bar-track">
-            <div class="{fill_class}" style="width:{pct}%"></div>
-        </div>
-        """
-    html += "</div>"
-    return html
-
+def upload_document(file_name: str, file_bytes: bytes) -> Optional[Dict[str, Any]]:
+    """Upload PDF/DOCX/TXT/MD document to backend."""
+    try:
+        files = {"file": (file_name, file_bytes)}
+        r = requests.post(UPLOAD_ENDPOINT, files=files, timeout=45)
+        if r.status_code == 200:
+            return r.json()
+        else:
+            st.error(f"Upload failed: {r.text}")
+    except requests.RequestException as e:
+        st.error(f"Upload request error: {e}")
+    return None
 
 # ------------------------------------------------------------------ #
-#  Sidebar                                                             #
+#  Sidebar Layout                                                      #
 # ------------------------------------------------------------------ #
 
 with st.sidebar:
-    st.markdown("## 🧬 Hybrid LLM System")
+    st.markdown("## 🧬 Hybrid LLM Control")
     st.markdown("---")
 
-    # Backend status
+    # Backend Connection Indicator
     health = check_backend_health()
     if health:
         st.markdown(
-            '<span class="status-dot status-online"></span> **Backend Online**',
+            '<span class="status-dot status-online"></span> **Backend Connected**',
             unsafe_allow_html=True,
         )
-        col1, col2 = st.columns(2)
-        with col1:
-            rag_status = "✅" if health.get("rag_ready") else "⬜"
-            st.caption(f"{rag_status} RAG Ready")
-        with col2:
-            lora_status = "✅" if health.get("lora_loaded") else "⏳"
-            st.caption(f"{lora_status} LoRA Loaded")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.caption("📚 RAG: Ready" if health.get("rag_ready") else "📚 RAG: Empty")
+        with c2:
+            st.caption("⚙️ LoRA: Loaded" if health.get("lora_loaded") else "⚙️ LoRA: Offline")
     else:
         st.markdown(
-            '<span class="status-dot status-offline"></span> **Backend Offline**',
+            '<span class="status-dot status-offline"></span> **Backend Disconnected**',
             unsafe_allow_html=True,
         )
-        st.caption("Start the FastAPI server first.")
+        st.error("FastAPI server must be running on localhost:8000")
 
     st.markdown("---")
 
-    # Architecture explanation
-    st.markdown("### 🏗️ How It Works")
-    st.markdown("""
-    Every query goes through a **3-stage pipeline**:
-
-    **① Semantic Router**
-    Your query is embedded and compared against two intent clusters 
-    using cosine similarity.
-
-    **② Pipeline Dispatch**
-    - **📚 RAG Pipeline** — Factual lookups from your documents 
-      via FAISS vector search.
-    - **⚙️ LoRA Pipeline** — Reasoning and style tasks via a 
-      fine-tuned language model.
-
-    **③ Response + Metadata**
-    You see the answer along with *which pipeline* handled it 
-    and the confidence scores.
-    """)
-
-    st.markdown("---")
-
-    # Controls
-    st.markdown("### ⚙️ Settings")
-    st.session_state.show_scores = st.toggle(
-        "Show router scores", value=st.session_state.show_scores
+    # Dynamic File Uploader
+    st.markdown("### 📤 Ingest Documents")
+    uploaded_file = st.file_uploader(
+        "Upload PDF, DOCX, TXT or Markdown files directly to persistent database:",
+        type=["pdf", "docx", "txt", "md"],
+        help="Parsed text will be chunked, embedded and loaded in ChromaDB + BM25 keyword index."
     )
+    if uploaded_file is not None:
+        with st.spinner("Parsing and indexing document..."):
+            res = upload_document(uploaded_file.name, uploaded_file.getvalue())
+            if res:
+                st.success(f"Ingested! Chunks: {res.get('chunks_indexed')}")
+                # Rerun to refresh metrics
+                time.sleep(1)
+                st.rerun()
 
-    force_option = st.selectbox(
-        "Force route (override router)",
+    st.markdown("---")
+
+    # Routing Settings
+    st.markdown("### ⚙️ Inference Settings")
+    force_opt = st.selectbox(
+        "Forced Pipeline Routing",
         options=["Auto (Router decides)", "Force RAG", "Force LoRA"],
-        index=0,
+        index=0
+    )
+    
+    # Adapter Settings
+    adapter_opt = st.selectbox(
+        "Select Active LoRA Adapter",
+        options=["base", "example_adapter"],  # Scans can update this
+        index=0
     )
 
     st.markdown("---")
 
-    # Quick ingest
-    st.markdown("### 📥 Quick Ingest")
-    ingest_text = st.text_area(
-        "Paste text to add to the RAG knowledge base:",
-        height=100,
-        placeholder="e.g. Our company was founded in 2020...",
-    )
-    if st.button("Ingest into RAG", use_container_width=True):
-        if ingest_text.strip():
-            try:
-                resp = requests.post(
-                    INGEST_ENDPOINT,
-                    json={"texts": [ingest_text.strip()]},
-                    timeout=30,
-                )
-                if resp.status_code == 200:
-                    result = resp.json()
-                    st.success(f"✅ Indexed {result['chunks_indexed']} chunk(s)")
-                else:
-                    st.error(f"Error: {resp.text}")
-            except requests.ConnectionError:
-                st.error("Backend not reachable.")
-        else:
-            st.warning("Enter some text first.")
-
-    st.markdown("---")
-
-    if st.button("🗑️ Clear Chat History", use_container_width=True):
+    # SQLite Session History list
+    st.markdown("### 💬 Session History")
+    sessions_list = fetch_sessions()
+    
+    if sessions_list:
+        selected_session = st.selectbox(
+            "Resume conversation session:",
+            options=[s["session_id"] for s in sessions_list],
+            format_func=lambda x: f"Session: {x[:8]}...",
+        )
+        
+        # Load session button
+        if st.button("Load Selected Session", use_container_width=True):
+            st.session_state.session_id = selected_session
+            msgs = load_session_messages(selected_session)
+            # Reformat messages
+            formatted = []
+            for m in msgs:
+                formatted.append({
+                    "role": m["role"],
+                    "content": m["content"],
+                    "metadata": m.get("metadata", {})
+                })
+            st.session_state.messages = formatted
+            st.rerun()
+            
+    # New session creation
+    if st.button("➕ Start New Session", use_container_width=True):
+        st.session_state.session_id = ""
         st.session_state.messages = []
         st.rerun()
 
-    st.markdown(
-        "<div style='text-align:center;margin-top:1rem;'>"
-        "<span style='font-size:0.7rem;color:#64748b;'>"
-        "Built with FastAPI + LangChain + PEFT"
-        "</span></div>",
-        unsafe_allow_html=True,
-    )
-
+    # Clear chat
+    if st.button("🗑️ Clear Current History", use_container_width=True):
+        st.session_state.messages = []
+        st.rerun()
 
 # ------------------------------------------------------------------ #
-#  Main Chat Area                                                      #
+#  Main Panel Content                                                 #
 # ------------------------------------------------------------------ #
 
-# Header
+# App Title Banner
 st.markdown("""
-<div class="app-header">
-    <h1>🧬 Hybrid RAG + LoRA Chat</h1>
-    <p>Ask anything — the semantic router will pick the best pipeline for your query.</p>
+<div class="header-banner">
+    <h1>🧬 Production-Ready Hybrid LLM System</h1>
+    <p>A high-performance system combining ChromaDB RAG and fine-tuned LoRA adapters with an Intent Classification Router.</p>
 </div>
 """, unsafe_allow_html=True)
 
-st.markdown("---")
+# Main Tabbed Interface
+tab_chat, tab_analytics = st.tabs(["💬 Dynamic Chat Room", "📊 System Analytics & Evaluation"])
 
-# Render chat history
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
+# ------------------------------------------------------------------ #
+#  Tab 1: Chat Room                                                   #
+# ------------------------------------------------------------------ #
 
-        # Show route badge and scores for assistant messages
-        if msg["role"] == "assistant" and "metadata" in msg:
-            meta = msg["metadata"]
-            badge_html = render_route_badge(
-                meta.get("routed_path", ""),
-                meta.get("latency_ms", 0),
+with tab_chat:
+    # Render chat messages from history
+    for m in st.session_state.messages:
+        with st.chat_message(m["role"]):
+            st.markdown(m["content"])
+            
+            # Render route indicators and citations
+            if m["role"] == "assistant" and "metadata" in m and m["metadata"]:
+                meta = m["metadata"]
+                
+                # Badges row
+                routed = meta.get("routed_path")
+                intent = meta.get("router_scores", {}).get("intent")
+                conf = meta.get("router_scores", {}).get("confidence", 0.0)
+                latency = meta.get("latency_ms")
+                
+                if routed:
+                    badge_class = "badge-rag" if routed == "RAG" else "badge-lora"
+                    badge_text = "📚 RAG pipeline" if routed == "RAG" else "⚙️ LoRA Fine-Tuned Model"
+                    
+                    badge_html = f"""
+                    <div class="badge-container">
+                        <span class="badge {badge_class}">{badge_text}</span>
+                        {f'<span class="badge badge-intent">Intent: {intent} (conf: {conf:.2f})</span>' if intent else ''}
+                        {f'<span class="chip">⚡ {latency:.0f} ms</span>' if latency else ''}
+                    </div>
+                    """
+                    st.markdown(badge_html, unsafe_allow_html=True)
+                
+                # Source Citations
+                sources = meta.get("sources", [])
+                if sources:
+                    st.markdown('<div class="citation-header">Retrieved Citations</div>', unsafe_allow_html=True)
+                    cit_html = '<div class="citation-grid">'
+                    for s in sources:
+                        cit_html += f"""
+                        <div class="citation-card">
+                            📄 File: <span>{s.get('file')}</span> | Page: <span>{s.get('page')}</span>
+                        </div>
+                        """
+                    cit_html += '</div>'
+                    st.markdown(cit_html, unsafe_allow_html=True)
+
+    # Chat User input
+    if prompt := st.chat_input("Ask the dual-pipeline system a question..."):
+        # Display user question
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        # Call Backend
+        with st.chat_message("assistant"):
+            with st.spinner("Routing query and generating response..."):
+                response = send_chat_query(
+                    query=prompt,
+                    session_id=st.session_state.session_id,
+                    force_route=force_opt,
+                    adapter_name=adapter_opt
+                )
+            
+            if response:
+                ans_text = response.get("response", "")
+                routed_path = response.get("routed_path", "")
+                scores = response.get("router_scores", {})
+                latency = response.get("latency_ms", 0.0)
+                session_id = response.get("session_id", "")
+                sources = response.get("sources", [])
+
+                # Update session id in state
+                st.session_state.session_id = session_id
+
+                st.markdown(ans_text)
+
+                # Route Badge & Latency
+                badge_class = "badge-rag" if routed_path == "RAG" else "badge-lora"
+                badge_text = "📚 RAG pipeline" if routed_path == "RAG" else "⚙️ LoRA Fine-Tuned Model"
+                intent = scores.get("intent")
+                conf = scores.get("confidence", 0.0)
+
+                badge_html = f"""
+                <div class="badge-container">
+                    <span class="badge {badge_class}">{badge_text}</span>
+                    {f'<span class="badge badge-intent">Intent: {intent} (conf: {conf:.2f})</span>' if intent else ''}
+                    <span class="chip">⚡ {latency:.0f} ms</span>
+                </div>
+                """
+                st.markdown(badge_html, unsafe_allow_html=True)
+
+                # Render Citations
+                if sources:
+                    st.markdown('<div class="citation-header">Retrieved Citations</div>', unsafe_allow_html=True)
+                    cit_html = '<div class="citation-grid">'
+                    for s in sources:
+                        cit_html += f"""
+                        <div class="citation-card">
+                            📄 File: <span>{s.get('file')}</span> | Page: <span>{s.get('page')}</span>
+                        </div>
+                        """
+                    cit_html += '</div>'
+                    st.markdown(cit_html, unsafe_allow_html=True)
+
+                # Save history
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": ans_text,
+                    "metadata": {
+                        "routed_path": routed_path,
+                        "router_scores": scores,
+                        "latency_ms": latency,
+                        "sources": sources
+                    }
+                })
+            else:
+                st.error("Failed to generate response. Check FastAPI console logs.")
+
+# ------------------------------------------------------------------ #
+#  Tab 2: Analytics Dashboard                                         #
+# ------------------------------------------------------------------ #
+
+with tab_analytics:
+    st.markdown("### 📊 Live Evaluation & Metrics Dashboard")
+    st.markdown("Aggregated latency, routing decisions, database contents, and error rates.")
+
+    metrics = get_backend_metrics()
+    if metrics:
+        # Metrics columns
+        c1, c2, c3, c4 = st.columns(4)
+        
+        with c1:
+            st.metric(
+                label="Total Queries",
+                value=metrics.get("total_queries", 0)
             )
-            st.markdown(badge_html, unsafe_allow_html=True)
+        with c2:
+            st.metric(
+                label="Average Latency",
+                value=f"{metrics.get('average_latency_ms', 0.0)} ms"
+            )
+        with c3:
+            st.metric(
+                label="Error Rate",
+                value=f"{metrics.get('error_rate', 0.0) * 100:.2f} %"
+            )
+        with c4:
+            st.metric(
+                label="ChromaDB Indexed Documents",
+                value=metrics.get("document_count", 0)
+            )
 
-            if st.session_state.show_scores and meta.get("router_scores"):
-                score_html = render_score_bars(meta["router_scores"])
-                if score_html:
-                    st.markdown(score_html, unsafe_allow_html=True)
+        st.markdown("---")
 
-# Chat input
-if prompt := st.chat_input("Ask a question…"):
-    # Display user message
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
+        # Routing breakdown charts
+        route_data = metrics.get("route_breakdown", {})
+        if route_data:
+            st.markdown("#### 🔀 Route Distribution Breakdown")
+            # Render a horizontal bar chart of decisions
+            st.bar_chart(route_data)
 
-    # Determine force_route
-    force_route = None
-    if force_option == "Force RAG":
-        force_route = "RAG"
-    elif force_option == "Force LoRA":
-        force_route = "LORA"
-
-    # Call backend
-    with st.chat_message("assistant"):
-        with st.spinner("Routing & generating…"):
-            result = send_query(prompt, force_route=force_route)
-
-        if result:
-            response_text = result.get("response", "No response received.")
-            routed_path = result.get("routed_path", "UNKNOWN")
-            latency_ms = result.get("latency_ms", 0)
-            router_scores = result.get("router_scores", {})
-
-            st.markdown(response_text)
-
-            # Route badge
-            badge_html = render_route_badge(routed_path, latency_ms)
-            st.markdown(badge_html, unsafe_allow_html=True)
-
-            # Score bars
-            if st.session_state.show_scores and router_scores:
-                score_html = render_score_bars(router_scores)
-                if score_html:
-                    st.markdown(score_html, unsafe_allow_html=True)
-
-            # Save to history
-            st.session_state.messages.append({
-                "role": "assistant",
-                "content": response_text,
-                "metadata": {
-                    "routed_path": routed_path,
-                    "latency_ms": latency_ms,
-                    "router_scores": router_scores,
-                },
-            })
-        else:
-            fallback = "⚠️ Could not get a response. Please check the backend."
-            st.markdown(fallback)
-            st.session_state.messages.append({
-                "role": "assistant",
-                "content": fallback,
-            })
+        st.markdown("---")
+        
+        # Details of the 6 Intents
+        st.markdown("#### 🎯 Active Intents & Routing Matrix")
+        st.markdown("""
+        | Intent Name | Subsystem Target | Routing Rationale |
+        |---|---|---|
+        | **factual** | 📚 RAG Pipeline | Factual data contained verbatim in documents |
+        | **document_qa** | 📚 RAG Pipeline | Explicit QA query about context files |
+        | **reasoning** | ⚙️ LoRA Fine-Tuned Model | Analytical or logic problem-solving |
+        | **summarization** | ⚙️ LoRA Fine-Tuned Model | Document summarization & compression |
+        | **email_generation** | ⚙️ LoRA Fine-Tuned Model | Structured formal output writing |
+        | **conversational** | ⚙️ LoRA Fine-Tuned Model | Greeting, feedback and banter |
+        """)
+        
+    else:
+        st.warning("Could not fetch metrics. Is backend connected?")
