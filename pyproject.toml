@@ -1,0 +1,14 @@
+[project]
+name = "dualbrain-qa"
+version = "2.0.0"
+description = "Hybrid RAG + LoRA Fine-Tuned LLM System with Semantic Router"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-v --tb=short"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"

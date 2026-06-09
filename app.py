@@ -342,8 +342,9 @@ with st.sidebar:
     # Adapter Settings
     adapter_opt = st.selectbox(
         "Select Active LoRA Adapter",
-        options=["base", "example_adapter"],  # Scans can update this
-        index=0
+        options=["base"],  # Adapters are auto-discovered from models/adapters/
+        index=0,
+        help="Place LoRA adapter folders in models/adapters/ — they'll be auto-detected on server startup."
     )
 
     st.markdown("---")
